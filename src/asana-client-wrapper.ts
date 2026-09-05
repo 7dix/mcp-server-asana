@@ -10,21 +10,59 @@ export class AsanaClientWrapper {
   private customFieldSettings: any;
   private sections: any;
   private userTaskLists: any;
+  private customTypes: any;
 
   constructor(token: string) {
-    const client = Asana.ApiClient.instance;
+    const client = new Asana.ApiClient();
+    client.timeout = 30000;
     client.authentications['token'].accessToken = token;
 
     // Initialize API instances
-    this.workspaces = new Asana.WorkspacesApi();
-    this.projects = new Asana.ProjectsApi();
-    this.tasks = new Asana.TasksApi();
-    this.stories = new Asana.StoriesApi();
-    this.projectStatuses = new Asana.ProjectStatusesApi();
-    this.tags = new Asana.TagsApi();
-    this.customFieldSettings = new Asana.CustomFieldSettingsApi();
-    this.sections = new Asana.SectionsApi();
-    this.userTaskLists = new Asana.UserTaskListsApi();
+    this.workspaces = new Asana.WorkspacesApi(client);
+    this.projects = new Asana.ProjectsApi(client);
+    this.tasks = new Asana.TasksApi(client);
+    this.stories = new Asana.StoriesApi(client);
+    this.projectStatuses = new Asana.ProjectStatusesApi(client);
+    this.tags = new Asana.TagsApi(client);
+    this.customFieldSettings = new Asana.CustomFieldSettingsApi(client);
+    this.sections = new Asana.SectionsApi(client);
+    this.userTaskLists = new Asana.UserTaskListsApi(client);
+    this.customTypes = new Asana.CustomTypesApi(client);
+  }
+
+  private page(response: any) {
+    const raw = response._response ?? response;
+    return { data: response.data, next_page: raw.next_page ? { offset: raw.next_page.offset } : null };
+  }
+
+  async getCustomTypes(project: string): Promise<any[]> {
+    const items: any[] = []; const offsets = new Set<string>();
+    let offset: string | undefined;
+    do {
+      const response = await this.customTypes.getCustomTypes({ project, limit: 100, offset,
+        opt_fields: 'name,status_options.name,status_options.enabled,status_options.completion_state,status_options.color' });
+      items.push(...response.data);
+      offset = this.page(response).next_page?.offset;
+      if (offset && offsets.has(offset)) throw new Error('Repeated pagination offset');
+      if (offset) offsets.add(offset);
+      if (offsets.size > 100) throw new Error('Custom type pagination limit exceeded');
+    } while (offset);
+    return items;
+  }
+  async getSection(id: string) {
+    return (await this.sections.getSection(id, { opt_fields: 'project.gid' })).data;
+  }
+  async getProjectSectionsPage(id: string, opts: any = {}) {
+    return this.page(await this.sections.getSectionsForProject(id, { limit: 100, ...opts }));
+  }
+  async getTasksForProjectPage(id: string, opts: any = {}) {
+    return this.page(await this.tasks.getTasksForProject(id, { limit: 100, ...opts }));
+  }
+  async getSubtasksPage(id: string, opts: any = {}) {
+    return this.page(await this.tasks.getSubtasksForTask(id, { limit: 100, ...opts }));
+  }
+  async getStoriesPage(id: string, opts: any = {}) {
+    return this.page(await this.stories.getStoriesForTask(id, { limit: 100, ...opts }));
   }
 
   async listWorkspaces(opts: any = {}) {
@@ -252,7 +290,6 @@ export class AsanaClientWrapper {
       const response = await this.customFieldSettings.getCustomFieldSettingsForProject(projectId, options);
       return response.data;
     } catch (error) {
-      console.error(`Error fetching custom field settings for project ${projectId}:`, error);
       return [];
     }
   }

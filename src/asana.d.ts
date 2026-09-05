@@ -62,6 +62,11 @@ declare module 'asana' {
     tags?: Array<{ gid: string }>;
   }
 
+  export class CustomTypesApi {
+    constructor(apiClient?: ApiClient);
+    getCustomTypes(opts?: any): Promise<any>;
+  }
+
   export class TasksApi {
     constructor(apiClient?: ApiClient);
 
