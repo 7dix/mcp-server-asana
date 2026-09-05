@@ -24,9 +24,9 @@ Configure these environment variables in the MCP client's secret/environment set
 
 Launch `node /absolute/path/to/dist/index.js` with those variables. No environment file is loaded automatically. Do not copy the upstream unversioned `npx` command: it runs the upstream server, not this fork.
 
-## Deploy on Vercel (Streamable HTTP)
+## Deploy on Vercel (Streamable HTTP + per-user OAuth)
 
-The Next.js route at `/api/mcp` uses stateless Streamable HTTP; SSE and Redis are disabled. `/api/health` is an unauthenticated liveness check.
+The Next.js route at `/api/mcp` uses stateless Streamable HTTP; SSE and Redis are disabled. `/api/health` is an unauthenticated liveness check. The HTTP transport never uses `ASANA_ACCESS_TOKEN`: each person authorizes with Asana and receives a short-lived, encrypted MCP token bound to this server.
 
 ```sh
 npm ci --ignore-scripts
@@ -34,9 +34,34 @@ npm run build:web
 vercel deploy
 ```
 
-Configure `ASANA_ALLOWED_PROJECTS`, `READ_ONLY_MODE`, and the Asana credential as Vercel environment variables, never in the repository. The deployed MCP URL is `https://<deployment>/api/mcp`.
+Create one Asana OAuth application for the deployment. Its redirect URI must be exactly:
 
-**Authentication status:** the current HTTP route accepts the same single `ASANA_ACCESS_TOKEN` as the stdio server and does not yet authenticate its caller. Do not add a real Asana token to a public deployment. The safe preview deployment intentionally omits that token and therefore fails closed. Per-user Asana OAuth must wrap the route before production use.
+```text
+https://<deployment>/oauth/callback
+```
+
+Configure these Vercel environment variables, never in the repository:
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `MCP_PUBLIC_ORIGIN` | Yes | Canonical HTTPS origin without a path, e.g. `https://mcp-server-asana.vercel.app`. |
+| `MCP_TOKEN_SECRET` | Yes | Base64url-encoded 32 random bytes. Generate once with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. |
+| `ASANA_OAUTH_CLIENT_ID` | Yes | Client ID of the Asana OAuth application. |
+| `ASANA_OAUTH_CLIENT_SECRET` | Yes | Client secret of the Asana OAuth application. |
+| `ASANA_ALLOWED_PROJECTS` | Yes | Comma-separated project GIDs; this remains a server-side hard boundary for every user. |
+| `READ_ONLY_MODE` | No | Defaults to `true`; exact `false` enables the supported write tools. |
+| `MCP_ALLOWED_CLIENT_IDS` | No | Comma-separated OAuth clients; defaults to ChatGPT's stable CIMD client. |
+| `MCP_ALLOWED_REDIRECT_URIS` | No | Comma-separated callbacks; defaults to ChatGPT's stable production callback. |
+
+For this pilot the project allowlist is:
+
+```text
+1218185230139565,1218186500983659
+```
+
+Redeploy after setting the variables. The deployed MCP URL is `https://<deployment>/api/mcp`. Add that URL in ChatGPT's plugin/app management and use OAuth/CIMD. The server publishes both OAuth discovery documents and returns the required `401` challenge automatically; teammates only see the normal Asana sign-in and consent screen.
+
+OAuth flow: ChatGPT + PKCE → this bridge → Asana OAuth → encrypted authorization code → audience-bound MCP access token. Asana access/refresh tokens remain encrypted inside the opaque bridge tokens. There is no application database and no shared PAT. A missing or invalid deployment configuration returns a bounded `503` response instead of leaving an MCP request open.
 
 ## Custom task types and statuses
 
@@ -78,6 +103,7 @@ Paginated lists return `{ "data": [...], "next_page": { "offset": "..." } }`. Co
 - Arguments are schema-validated, unknown top-level parameters are rejected, and body sizes are capped.
 - The active server does not log request bodies, tokens or raw API exceptions. Errors expose a generic message and HTTP status where available. Task data is still intentionally returned to the connected AI client.
 - Each server client has its own Asana SDK client/token. There is no shared SDK authentication singleton. Requests time out after 30 seconds.
+- HTTP access tokens are encrypted with AES-256-GCM, expire within one hour, and are bound to the exact MCP resource URL. OAuth authorization codes expire after two minutes and require PKCE S256. Refresh tokens expire after 30 days.
 - Production dependencies are exact versions with a committed lockfile. The build leaves dependencies external, avoiding hidden copies of an old SDK inside the bundle. This package is marked private to prevent accidental npm publication.
 
 The allowlist is an application check, not a replacement for Asana permissions. Use an account with only the access this integration needs. Concurrent membership changes between the check and the API request cannot be made atomic by this MCP. Authorized task responses can include related metadata and links; this is not a field-level data-loss-prevention filter. Treat task text and comments as untrusted content, and keep the AI client's action approvals enabled. The server does not itself prevent a model from misunderstanding a legitimate tool request.
@@ -86,6 +112,6 @@ The allowlist is an application check, not a replacement for Asana permissions. 
 
 The test suite exercises real Asana SDK requests against a local HTTP fixture: project/ancestor authorization, read-only enforcement, disabled operations, malformed input, status validation, pagination, POST→PUT, partial failure and readback mismatch. It also launches the built stdio server and verifies its advertised capabilities and write blocking. The Vercel build and MCP `initialize`/`tools/list` handshake are checked separately.
 
-No test uses a real Asana credential. Live custom-type permissions and behavior must still be verified on a disposable task before migrating existing projects. A clean dependency audit is not a complete security certification.
+No test uses a real Asana credential. Live OAuth, custom-type permissions and behavior must still be verified on a disposable task before migrating existing projects. The fully stateless design cannot provide a global, single-use authorization-code replay ledger across Vercel instances; short code lifetime, authenticated encryption and PKCE limit that exposure. Add a durable replay store if a stricter authorization-server profile is required. A clean dependency audit is not a complete security certification.
 
 Upstream code remains in the repository for reference, but only `src/index.ts` and `src/hardened-tools.ts` define the active MCP surface.

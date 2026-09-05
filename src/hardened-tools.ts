@@ -22,9 +22,11 @@ export function createHardenedTools(client: AsanaClientWrapper, config: Security
   const scope = new ProjectScope(client, config);
   const definitions = new Map<string, Definition>();
   const add = (name: string, description: string, properties: Record<string, any>, required: string[], write: boolean, run: Definition['run']) => {
+    const scopes = write ? ['asana:read', 'asana:write'] : ['asana:read'];
     definitions.set(name, { tool: { name, description,
       inputSchema: { type: 'object', properties, required, additionalProperties: false },
-      annotations: { readOnlyHint: !write, destructiveHint: write, openWorldHint: true } }, write, run });
+      annotations: { readOnlyHint: !write, destructiveHint: write, openWorldHint: true },
+      _meta: { securitySchemes: [{ type: 'oauth2', scopes }] } }, write, run });
   };
   async function typeChange(data: any, projects: string[], current?: any) {
     if (data.custom_type === undefined && data.custom_type_status_option === undefined) return {};
@@ -162,5 +164,10 @@ export function createHardenedTools(client: AsanaClientWrapper, config: Security
       return json(await def.run(args));
     } catch (error) { return { ...json(publicError(error)), isError: true }; }
   }
-  return { tools, call };
+  const scopesFor = (name: string): string[] | undefined => {
+    const def = definitions.get(name);
+    if (!def || (config.readOnly && def.write)) return undefined;
+    return def.write ? ['asana:read', 'asana:write'] : ['asana:read'];
+  };
+  return { tools, call, scopesFor };
 }
