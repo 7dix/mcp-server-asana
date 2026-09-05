@@ -236,7 +236,7 @@ export function createResourceHandlers(asanaClient: AsanaClientWrapper) {
       };
     } catch (error) {
       console.error(`Error reading project ${projectId}:`, error);
-      throw new Error(`Failed to read project: ${error.message}`);
+      throw new Error(`Failed to read project: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

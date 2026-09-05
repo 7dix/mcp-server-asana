@@ -7,8 +7,9 @@ async function main() {
   await build({
     entryPoints: ['src/index.ts'],
     bundle: true,
+    packages: 'external',
     platform: 'node',
-    target: 'node18',
+    target: 'node24',
     format: 'esm',
     outfile: 'dist/index.js',
     define: {
@@ -35,4 +36,4 @@ async function main() {
   });
 }
 
-main().catch(console.error);
+main().catch(() => { console.error('Build failed'); process.exitCode = 1; });

@@ -1,3 +1,11 @@
+## 1.8.1 — Project-scoped fork
+
+- Add custom task type/status discovery, validated updates, two-step task creation and readback verification.
+- Require project allowlists, authorize subtask ancestry, default to read-only, and remove deletion/global tools from the active server.
+- Validate tool arguments and redact API errors; remove request logging and legacy prompt/resource exposure.
+- Refresh pinned dependencies and lockfile, keep dependencies external to the build, and add SDK/stdio regression tests.
+- Existing installation instructions are replaced by explicit local builds. No package publication or live Asana migration is performed.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.

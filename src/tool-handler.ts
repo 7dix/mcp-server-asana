@@ -202,7 +202,7 @@ export function tool_handler(asanaClient: AsanaClientWrapper): (request: CallToo
             };
           } catch (error) {
             // When error occurs and html_notes was provided, validate it
-            if (taskData.html_notes && error instanceof Error && [400, 500].includes(error.status)) {
+            if (taskData.html_notes && error instanceof Error && [400, 500].includes((error as Error & { status: number }).status)) {
               const xmlValidationErrors = validateAsanaXml(taskData.html_notes);
               if (xmlValidationErrors.length > 0) {
                 // Provide detailed validation errors to help the user
