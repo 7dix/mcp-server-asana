@@ -1,5 +1,4 @@
 declare const __VERSION__: string;
 /** @internal - This file is auto-generated */
-export const VERSION = process.env.NODE_ENV === 'development'
-  ? require('../package.json').version  // Development: read from package.json
-  : __VERSION__;                        // Production: replaced at build time
+// esbuild replaces __VERSION__ for the stdio binary. Next.js keeps the fallback.
+export const VERSION = typeof __VERSION__ === 'undefined' ? '1.8.1' : __VERSION__;

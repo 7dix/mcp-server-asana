@@ -1,10 +1,10 @@
 # Project-scoped Asana MCP
 
-A maintained fork starting from [roychri/mcp-server-asana](https://github.com/roychri/mcp-server-asana), upstream commit `c4508aac54e210d49dbc9d7d8ad1fa98b9090a82` (MIT). Adds custom task types/statuses and a smaller, project-authorized tool surface.
+A maintained fork starting from [roychri/mcp-server-asana](https://github.com/roychri/mcp-server-asana), upstream commit `c4508aac54e210d49dbc9d7d8ad1fa98b9090a82` (MIT). Adds custom task types/statuses and a smaller, project-authorized tool surface. It supports both a local stdio transport and a stateless Streamable HTTP transport for Vercel.
 
-## Run locally
+## Run locally (stdio)
 
-Requires Node.js **24.15 or newer**. This is a **stdio MCP server**, not a public HTTP service. Connect it to a client that can launch a local process. A hosted/client-specific transport is a separate deployment step.
+Requires Node.js **24.15 or newer**. Connect the stdio build to a client that can launch a local process.
 
 ```sh
 npm ci --ignore-scripts
@@ -23,6 +23,20 @@ Configure these environment variables in the MCP client's secret/environment set
 | `READ_ONLY_MODE` | No | Defaults to `true`. Only exact `false` enables supported writes. |
 
 Launch `node /absolute/path/to/dist/index.js` with those variables. No environment file is loaded automatically. Do not copy the upstream unversioned `npx` command: it runs the upstream server, not this fork.
+
+## Deploy on Vercel (Streamable HTTP)
+
+The Next.js route at `/api/mcp` uses stateless Streamable HTTP; SSE and Redis are disabled. `/api/health` is an unauthenticated liveness check.
+
+```sh
+npm ci --ignore-scripts
+npm run build:web
+vercel deploy
+```
+
+Configure `ASANA_ALLOWED_PROJECTS`, `READ_ONLY_MODE`, and the Asana credential as Vercel environment variables, never in the repository. The deployed MCP URL is `https://<deployment>/api/mcp`.
+
+**Authentication status:** the current HTTP route accepts the same single `ASANA_ACCESS_TOKEN` as the stdio server and does not yet authenticate its caller. Do not add a real Asana token to a public deployment. The safe preview deployment intentionally omits that token and therefore fails closed. Per-user Asana OAuth must wrap the route before production use.
 
 ## Custom task types and statuses
 
@@ -70,7 +84,7 @@ The allowlist is an application check, not a replacement for Asana permissions. 
 
 ## Validation and limitations
 
-The test suite exercises real Asana SDK requests against a local HTTP fixture: project/ancestor authorization, read-only enforcement, disabled operations, malformed input, status validation, pagination, POST→PUT, partial failure and readback mismatch. It also launches the built stdio server and verifies its advertised capabilities and write blocking.
+The test suite exercises real Asana SDK requests against a local HTTP fixture: project/ancestor authorization, read-only enforcement, disabled operations, malformed input, status validation, pagination, POST→PUT, partial failure and readback mismatch. It also launches the built stdio server and verifies its advertised capabilities and write blocking. The Vercel build and MCP `initialize`/`tools/list` handshake are checked separately.
 
 No test uses a real Asana credential. Live custom-type permissions and behavior must still be verified on a disposable task before migrating existing projects. A clean dependency audit is not a complete security certification.
 

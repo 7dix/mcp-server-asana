@@ -2,6 +2,7 @@ _NOTES.md
 CLAUDE.local.md
 node_modules
 dist
+.next
 .aider*
 .env
 !.aider.conf.yml
